@@ -14,6 +14,8 @@ type plan struct {
 	startTop  int32
 	width     int32
 	height    int32
+	pattern   []tupple
+	overlap   bool
 }
 
 type tupple struct {
@@ -63,7 +65,7 @@ func getData(fileName string) ([]plan, error) {
 			width:     int32(wid),
 			height:    int32(hei),
 		}
-
+		tmpPlan.pattern = generatePattern(tmpPlan)
 		plans = append(plans, tmpPlan)
 	}
 
@@ -84,27 +86,22 @@ func generatePattern(p plan) []tupple {
 	return pattern
 }
 
-func placePattern(pattern []tupple, ws [][]int) [][]int {
+func placePattern(p plan, ws [][]int) [][]int {
 
-	for _, point := range pattern {
+	for _, point := range p.pattern {
 		ws[point.row][point.column]++
 	}
 
 	return ws
 }
 
-func part1(plans []plan) int {
+func part1(plans []plan, workspace [][]int) (int, [][]int) {
 	// create a multidemnsional array
 	// place down all of the elves patterns 1by1
 	// mark +1 at each overlapping sqaure
 
-	workspace := make([][]int, 1000)
-	for i := range workspace {
-		workspace[i] = make([]int, 1000)
-	}
 	for _, plan := range plans {
-		t := generatePattern(plan)
-		workspace = placePattern(t, workspace)
+		workspace = placePattern(plan, workspace)
 	}
 
 	overlap := 0
@@ -115,24 +112,46 @@ func part1(plans []plan) int {
 			}
 		}
 	}
-	return overlap
+	return overlap, workspace
+}
+
+func part2(plans []plan, ws [][]int) plan {
+	// for each plan
+	found := -1
+	for idx, plan := range plans {
+		// fmt.Printf("Checking plan [%d]\n", plan.ID)
+		// check overlap
+		for _, point := range plan.pattern {
+			if ws[point.row][point.column] > 1 {
+				plan.overlap = true
+				break
+			}
+		}
+		if !plan.overlap {
+			found = idx
+			break
+		}
+	}
+	fmt.Println(found)
+	return plans[found]
 }
 
 func main() {
+
 	dataFileName := "../../data/day3/day_3_input.txt"
 	plans, err := getData(dataFileName)
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println(generatePattern(plans[0]))
-	// fmt.Println(generatePattern(plan{
-	// 	ID:        1,
-	// 	startTop:  2,
-	// 	startLeft: 3,
-	// 	width:     5,
-	// 	height:    4,
-	// }))
+	workspace := make([][]int, 1000)
+	for i := range workspace {
+		workspace[i] = make([]int, 1000)
+	}
 
-	fmt.Println(part1(plans))
+	overlap, workspace := part1(plans, workspace)
+	fmt.Println(overlap)
+
+	p := part2(plans, workspace)
+	fmt.Printf("Plan ID: %d\n", p.ID)
 
 }
