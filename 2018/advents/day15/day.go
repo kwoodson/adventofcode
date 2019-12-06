@@ -70,11 +70,11 @@ func getData(fileName string) ([][]string, []player, error) {
 	return game, players, nil
 }
 
-func dumpGame(game [][]string, players []player) {
+func dumpGame(game [][]string, players *[]player) {
 	for y := 0; y < len(game); y++ {
 	innerloop:
 		for x := 0; x < len(game[y]); x++ {
-			for _, player := range players {
+			for _, player := range *players {
 				if player.loc.Y == y && player.loc.X == x {
 					c := "E"
 					if !player.elf {
@@ -90,19 +90,18 @@ func dumpGame(game [][]string, players []player) {
 	}
 }
 
-func findPath(game [][]string, start, end point, path []point, valid [][]point) ([]point, [][]point, bool) {
+func findPath(game [][]string, start, end point, path []point, valid map[*point][]point, players *[]player) ([]point, bool) {
 	if start.X == end.X && start.Y == end.Y {
-		return path, nil, true
+		return path, true
 	}
-	// if distance(start, end) == 1 {
-	// 	return path, nil, true
-	// }
-
 	neighbors := getNeighbors(start, game)
 
 	candidates := make([]point, 0)
 	lowest := len(game) * 2
 	for _, n := range neighbors {
+		if occupied(n, players) {
+			continue
+		}
 		dist := distance(n, end)
 		if dist <= lowest {
 			if dist == lowest {
@@ -117,30 +116,28 @@ func findPath(game [][]string, start, end point, path []point, valid [][]point) 
 	// tmpPath := []point{}
 	result := false
 cloop:
-	for _, c := range candidates {
+	for idx, c := range candidates {
 		for _, n := range path {
 			if c == n {
 				continue cloop // safegaurd against looping over same path
 			}
 		}
 		tmpPath := append(path, c)
-		vpath, _, result = findPath(game, c, end, tmpPath, valid)
-		if result && len(vpath) > 0 {
-			valid = append(valid, vpath)
+		vpath, result = findPath(game, c, end, tmpPath, valid, players)
+		tmpResultPath := vpath
+		if result && len(tmpResultPath) > 0 {
+			(valid[&candidates[idx]]) = tmpResultPath
 		}
 	}
-	if result && len(vpath) > 0 {
-		return nil, valid, true
-	} else {
-		return nil, valid, false
-	}
+
+	return nil, true
 }
 
-func movePlayers(game [][]string, players []player) []player {
+func movePlayers(game [][]string, players *[]player) {
 	players = sortPlayers(players)
-	for cpIndex, player := range players {
+	for cpIndex, player := range *players {
 		nextTo := false
-		for _, p := range players {
+		for _, p := range *players {
 			if player.ID == p.ID {
 				continue
 			}
@@ -162,25 +159,20 @@ func movePlayers(game [][]string, players []player) []player {
 			// _, valid, result := findPath(game, player, opp, path)
 			if player.loc != tmploc {
 				// move happened, turn over
-				players[cpIndex].loc = tmploc // persist move
+				(*players)[cpIndex].loc = tmploc // persist move
 				continue
 			}
 			fmt.Printf("player(%d) didn't move!\n", player.ID)
-			// panic("DIDNT MOVE!")
 		}
 	}
-	return players
 }
 
-func war(players []player, game [][]string) []player {
-	// TODO: EVERYONE MAKE THEIR MOVE FIRST, IF MOVED, THEN REMOVE FROM TURN.  IF NOT MOVED, THEN ATTACK.
+func war(players *[]player, game [][]string) {
 	// each player needs to take a turn, if a player dies then remove him
 	// find the next player in order that hasn't moved
-	// MIGHT NEED TO SORT HERE!
-	// var cp player
 	playerMap := make(map[int]player)
 	round := make([]int, 0)
-	for _, p := range players {
+	for _, p := range *players {
 		round = append(round, p.ID)
 		playerMap[p.ID] = p
 	}
@@ -197,33 +189,34 @@ loopround:
 		action = append(action, rid)
 		// round = append(round[:rid], round[rid+1:]...) // remove player from round
 		// attack here
-		attackPlayer, valid := attack(cp, players, game)
+		ap, valid := attack(cp, players, game)
 		if valid { // no one to attack
-			attackPlayer.hp -= cp.attackPower
+			fmt.Printf("%v[%d](%d,%d) hp[%d] attack %v[%d](%d,%d) hp[%d]\n", cp.self, cp.ID, cp.loc.Y, cp.loc.X, cp.hp, ap.self, ap.ID, ap.loc.Y, ap.loc.X, ap.hp)
+			ap.hp -= cp.attackPower
 
-			if attackPlayer.hp <= 0 {
+			if ap.hp <= 0 {
 				if true {
-					fmt.Println("I died")
+					fmt.Printf("%v[%d] died\n", ap.self, ap.ID)
 				}
 				// remove attackPlayer
 				// player died, remove him
 				removeID := -1
-				for pid, p := range players {
-					if attackPlayer.ID == p.ID {
+				for pid, p := range *players {
+					if ap.ID == p.ID {
 						removeID = pid
 						break
 					}
 				}
-				players = append(players[:removeID], players[removeID+1:]...) // remove player from players
+				*players = append((*players)[:removeID], (*players)[removeID+1:]...) // remove player from players
 
 				// also remove him from the round
-				killed = append(killed, attackPlayer.ID)
+				killed = append(killed, ap.ID)
 
 			} else {
-				playerMap[attackPlayer.ID] = attackPlayer
-				for idx, p := range players {
-					if attackPlayer.ID == p.ID {
-						players[idx] = attackPlayer // persist the hitpoints
+				playerMap[ap.ID] = ap
+				for idx, p := range *players {
+					if ap.ID == p.ID {
+						(*players)[idx] = ap // persist the hitpoints
 						break
 					}
 				}
@@ -249,19 +242,18 @@ loopround:
 		panic("Someone didn't move")
 	}
 
-	for _, player := range players {
-		fmt.Printf("AFTER: %v: id(%d) loc(%d, %d) hp(%d)\n", player.self, player.ID, player.loc.Y, player.loc.X, player.hp)
-	}
-	return players
+	// for _, player := range *players {
+	// fmt.Printf("AFTER: %v: id(%d) loc(%d, %d) hp(%d)\n", player.self, player.ID, player.loc.Y, player.loc.X, player.hp)
+	// }
 }
 
-func attack(p player, players []player, game [][]string) (player, bool) {
+func attack(p player, players *[]player, game [][]string) (player, bool) {
 	var opponent player
 	valid := true
-	candidates := make([]player, 0)
+	candidates := &[]player{}
 	lowestHP := 200
 	for _, n := range getNeighbors(p.loc, game) {
-		for _, opp := range players {
+		for _, opp := range *players {
 			if p.ID == opp.ID {
 				continue
 			}
@@ -270,44 +262,45 @@ func attack(p player, players []player, game [][]string) (player, bool) {
 			}
 			if n == opp.loc {
 				if opp.hp == lowestHP {
-					candidates = append(candidates, opp)
+					*candidates = append(*candidates, opp)
 				} else if opp.hp < lowestHP {
-					candidates = []player{opp}
+					*candidates = []player{opp}
 					lowestHP = opp.hp
 				}
 			}
 		}
 	}
 	// more than 1 candidate, sort and then select
-	if len(candidates) > 1 {
+	if len(*candidates) > 1 {
 		// sort and select based upon t->b l->r
 		candidates = sortPlayers(candidates)
-		opponent = candidates[0]
-	} else if len(candidates) == 1 {
-		opponent = candidates[0]
+		opponent = (*candidates)[0]
+	} else if len(*candidates) == 1 {
+		opponent = (*candidates)[0]
 	} else {
 		// this is probably ok, someone died??
-		fmt.Printf("Someone probably died: no candidates to attack for %d at (%d,%d)\n", p.ID, p.loc.Y, p.loc.X)
+		fmt.Printf("No one to attack or someone probably died: no candidates to attack for %d at (%d,%d)\n", p.ID, p.loc.Y, p.loc.X)
 		valid = false
 		// panic("No candidates to attack")
 	}
 
 	return opponent, valid
 }
-func sortPlayers(players []player) []player {
+func sortPlayers(players *[]player) *[]player {
 	// must sort each time through since players are moving
-	sort.SliceStable(players, func(i, j int) bool {
-		if players[i].loc.Y < players[j].loc.Y {
+	ps := *players
+	sort.SliceStable(ps, func(i, j int) bool {
+		if ps[i].loc.Y < ps[j].loc.Y {
 			return true
-		} else if players[i].loc.Y == players[j].loc.Y {
-			return players[i].loc.X < players[j].loc.X
+		} else if ps[i].loc.Y == ps[j].loc.Y {
+			return ps[i].loc.X < ps[j].loc.X
 		}
 		return false
 	})
-	return players
+	return &ps
 }
-func occupied(loc point, players []player) bool {
-	for _, player := range players {
+func occupied(loc point, players *[]player) bool {
+	for _, player := range *players {
 		if loc.X == player.loc.X && loc.Y == player.loc.Y {
 			return true
 		}
@@ -344,10 +337,11 @@ func getNeighbors(loc point, game [][]string) []point {
 	if loc.Y+1 <= maxY && game[loc.Y+1][loc.X] == "." {
 		points = append(points, point{X: loc.X, Y: loc.Y + 1})
 	}
+
 	return points
 }
 
-func nextMove(pStart player, players []player, game [][]string) point {
+func nextMove(pStart player, players *[]player, game [][]string) point {
 	distanceMap := make(map[point]map[point]int)
 	candidates := make([]point, 0)
 	lowest := len(game)
@@ -356,13 +350,16 @@ func nextMove(pStart player, players []player, game [][]string) point {
 	// If the space is a wall/cave or is occupied, skip
 	distanceMap[pStart.loc] = make(map[point]int)
 	// loop through each player and find an opponent
-	for _, cp := range players {
+	for _, cp := range *players {
 		c := cp.loc
 		if pStart.opp == cp.opp {
 			continue
 		}
 		// for each opponent's neighbor, find a valid location in which currentPlayer will attempt to move
 		for _, cn := range getNeighbors(c, game) {
+			if occupied(cn, players) {
+				continue
+			}
 			// find the distance between current Player and the opponent's neighbor
 			dist := distance(pStart.loc, cn)
 			distanceMap[pStart.loc][cn] = dist
@@ -379,16 +376,26 @@ func nextMove(pStart player, players []player, game [][]string) point {
 		}
 
 	}
-	allResults := make(map[string][]point)
+	allResults := make(map[*point][]point)
 	for _, c := range candidates {
+		if occupied(c, players) {
+			continue
+		}
 		path := []point{}
-		valid := make([][]point, 0)
-		_, valid, result := findPath(game, pStart.loc, c, path, valid)
-		if result {
+		// valid := make(map[point][]point)
+		valid := map[*point][]point{}
+		_, _ = findPath(game, pStart.loc, c, path, valid, players)
+		if len(valid) > 0 {
 			fmt.Println(valid)
 			// we need to combine all valid results and make a move based upon the shortest *valid* path
+		loopvalid:
 			for _, result := range valid {
-				allResults[fmt.Sprintf("%v%v", result[0].Y, result[0].X)] = result
+				for key := range allResults {
+					if key.X == result[0].X && key.Y == result[0].Y {
+						continue loopvalid
+					}
+				}
+				allResults[&result[0]] = result
 			}
 		}
 	}
@@ -397,12 +404,12 @@ func nextMove(pStart player, players []player, game [][]string) point {
 	// shortest := []int{}
 	candidates = []point{}
 	lowest = len(game) * 2
-	for _, result := range allResults {
+	for p, result := range allResults {
 		if len(result) <= lowest {
 			if len(result) == lowest {
-				candidates = append(candidates, result[0])
+				candidates = append(candidates, *p)
 			} else {
-				candidates = []point{result[0]}
+				candidates = []point{*p}
 			}
 			lowest = len(result)
 		}
@@ -423,10 +430,10 @@ func nextMove(pStart player, players []player, game [][]string) point {
 	return candidates[0]
 }
 
-func continueGame(players []player) bool {
-	p1 := players[0]
-	for i := 1; i < len(players); i++ {
-		if players[i].opp != p1.opp {
+func continueGame(players *[]player) bool {
+	p1 := (*players)[0]
+	for i := 1; i < len(*players); i++ {
+		if (*players)[i].opp != p1.opp {
 			return true
 		}
 	}
@@ -434,42 +441,31 @@ func continueGame(players []player) bool {
 	return false
 }
 
-func getHP(players []player) int {
+func getHP(players *[]player) int {
 	total := 0
-	for _, p := range players {
+	for _, p := range *players {
 		total += p.hp
 	}
 	return total
 }
 
-func part1(game [][]string, players []player) error {
-	dumpGame(game, players)
-
-	// perform round
+func part1(game [][]string, players *[]player) error {
 	round := 1
-	for len(players) != 1 {
+	for len(*players) != 1 {
 
 		fmt.Printf("ROUND: %d\n", round)
-		// move players first
-		if round == 24 {
-			fmt.Println("24")
-		}
-		players = movePlayers(game, players)
-		players = war(players, game)
-		// game over?
-
-		// perform attacks
-		fmt.Println()
-		fmt.Println()
 		dumpGame(game, players)
-		fmt.Println()
-		fmt.Println()
-		fmt.Println()
+
+		// move players first
+		movePlayers(game, players)
+		war(players, game)
+		// game over?
+		dumpGame(game, players)
 
 		if !continueGame(players) {
 			// game summary
 			hp := getHP(players)
-			fmt.Printf("Game ended in %d rounds.  HP: %d  Score: %d", round-1, hp, hp*round-1)
+			fmt.Printf("Game ended in %d rounds.  HP: %d  Score: %d", round, hp, hp*round)
 			break
 		}
 		round++
@@ -481,12 +477,14 @@ func part1(game [][]string, players []player) error {
 func main() {
 	// dataFileName := "../../data/day15/input.txt"
 	// dataFileName := "../../data/day15/test.txt"
-	dataFileName := "../../data/day15/test.1.txt"
+	// dataFileName := "../../data/day15/test.1.txt"
+	dataFileName := "../../data/day15/test.2.txt"
+	// dataFileName := "../../data/day15/test.3.txt"
 
 	game, players, err := getData(dataFileName)
 	if err != nil {
 		panic(err)
 	}
 
-	part1(game, players)
+	part1(game, &players)
 }
