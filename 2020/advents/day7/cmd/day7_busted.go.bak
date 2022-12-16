@@ -1,0 +1,169 @@
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+type Bag struct {
+	color string
+	bags  map[string]int
+}
+
+type Sack struct {
+	color  string
+	count  int
+	parent string
+}
+
+func getData() (map[string]*Bag, error) {
+	dataFileName := "../data/input.txt"
+	bags := make(map[string]*Bag)
+
+	alldata, err := ioutil.ReadFile(dataFileName)
+	if err != nil {
+		return nil, err
+	}
+	re := regexp.MustCompile(`(?P<Count>\d) (?P<Bag>\w*\s\w*) bags?`)
+	for _, p := range strings.Split(string(alldata), "\n") {
+
+		s := strings.Split(p, "contain")
+		b := Bag{
+			color: s[0][:len(s[0])-6],
+		}
+		b.bags = make(map[string]int)
+		for _, ss := range strings.Split(s[1], ",") {
+			for _, v := range re.FindAllStringSubmatch(ss, 1) {
+				num, err := strconv.Atoi(string(v[1]))
+				if err != nil {
+					return nil, err
+				}
+				b.bags[string(v[2])] = num
+				// fmt.Println(z[i][1],
+				// row = append(row, strings.Split(z, "")...)
+			}
+		}
+		c := &b
+		bags[c.color] = c
+	}
+	return bags, nil
+}
+
+func search(bags map[string]*Bag, colors map[string]int) map[string]int {
+	colorsFound := make(map[string]int)
+	for bag_name := range bags {
+		b := bags[bag_name]
+		for c := range colors {
+			if v, ok := b.bags[c]; ok {
+				colorsFound[b.color] = v * colors[c]
+			}
+		}
+	}
+	return colorsFound
+}
+
+// Part1 compute result
+func Part1(bags map[string]*Bag) int {
+	// load each group into a set and count results
+	colorsFound := make(map[string]int)
+	colorsSearch := make(map[string]int)
+	colorsSearch["shiny gold"] = 0
+	// each bag type check to see if it can hold a shiny gold bag
+	for {
+		// find all bags that have a color
+		colorsSearch = search(bags, colorsSearch)
+		for c := range colorsSearch {
+			if _, ok := colorsFound[c]; ok {
+				colorsFound[c]++
+				delete(colorsSearch, c)
+			} else {
+				colorsFound[c] = 0
+			}
+		}
+		if len(colorsSearch) == 0 {
+			break
+		}
+	}
+
+	return len(colorsFound)
+}
+
+func search2(bags map[string]*Bag, colors map[string]int, m int) map[string]int {
+	colorsFound := make(map[string]int)
+	for c, m := range colors {
+		for b, v := range bags[c].bags {
+			colorsFound[bags[b].color] = v * m
+		}
+	}
+	return colorsFound
+}
+
+// func test(bags map[string]int) int {
+// 	// if no bags
+// 	//  return 0
+// 	for bag := range bags {
+// 		result = test(bags)
+// 	}
+// 	return 0
+// }
+
+func Part2(allbags map[string]*Bag) int {
+	count := 0
+	processColors := make([]Sack, 0)
+	// processed := make([]Sack, 0)
+	next := make([]Sack, 0)
+	// root := allbags["shiny gold"]
+	// for c, v := range root.bags {
+	// one kid at a time
+	processColors = append(processColors, Sack{
+		color:  "posh brown",
+		count:  2,
+		parent: "shiny gold",
+	})
+	// }
+
+	for {
+		fmt.Printf("Length of processColors: %v\n", len(processColors))
+		for _, sack := range processColors {
+			// find the bags that are in this bag and add to processColors
+			fmt.Printf("Color: %v\tParent: %v\tm: %v\n", sack.color, sack.parent, sack.count)
+			if len(allbags[sack.color].bags) == 0 {
+				fmt.Printf("\t\t COUNTED: Color: %v\tParent: %v\tm: %v\n", sack.color, sack.parent, sack.count)
+				count += sack.count // do we add the last bag as its count?
+			}
+			for b, v := range allbags[sack.color].bags {
+				fmt.Printf("\tAdding: Color: %v\tParent: %v\tm: %v\n", b, sack.color, sack.count*v)
+				next = append(next, Sack{
+					color:  b,
+					count:  v * sack.count,
+					parent: sack.color,
+				})
+			}
+		}
+
+		if len(next) == 0 {
+			break
+		}
+		if count > 11000 {
+			break
+		}
+		processColors = next
+		next = next[:0]
+	}
+	return count
+}
+
+func main() {
+	// test data
+	bags, err := getData()
+	if err != nil {
+		panic(err)
+	}
+
+	// fmt.Println(Part1(bags))
+	// too low 1483
+	fmt.Println(Part2(bags))
+}
