@@ -1,0 +1,168 @@
+#!/usr/bin/env python
+
+from collections import Counter
+
+def parse():
+    with open('input.txt') as fd:
+        data = fd.readlines()
+
+    results = []
+    for line in data:
+        arr = line.strip().split()
+        results.append([int(a) for a in arr])
+        
+    return results
+
+def part2():
+    num1, num2 = parse()
+
+    n2 = Counter(num2)
+
+    results = []
+    for a in num1:
+        results.append(a * n2[a])
+
+
+    #print(results)
+    print(sum(results))
+
+def check_asc(report):
+    if not (report[0] < report[1] < report[2]):
+        report = report[::-1]
+
+    cur = 0
+    errors = 0
+
+    while cur < len(report)-1:
+        if errors > 1:
+            return False
+
+        if report[cur] > report[cur+1]:
+            # by skipping the current and add an error
+            errors += 1
+
+        # advance 
+        cur += 1
+
+    if errors > 1:
+        return False
+
+    return True
+
+
+
+def check_order_2(report):
+    if not (report[0] < report[1] < report[2]):
+        report = report[::-1]
+
+    if not check_asc(report):
+        return False
+
+    cur = 0
+    level = 1
+    errors = 0
+    while cur < len(report)-1 or level + 1 < len(report):
+        if errors > 1 or level + 1 > len(report):
+            return False
+
+        current = report[cur]
+        _next = report[level]
+
+        result = _next-current
+
+        # measure 0 -> 1
+        # if too big, can we go from 0->2
+        # or can we increment the error and move current to 1 and continue
+
+        # can we go 0 -> 1?
+        if not (1 <= result <= 3):
+            # we can't go from 0 -> 1
+
+            # can we go from 0 -> 2 ?
+            if not (1 <= report[level+1]-current <= 3):
+                # we can't go from 0 -> 2 so move cur to +1
+                cur += 1
+                level += 1
+
+            # we can go from 0 -> 2
+            else:
+                cur = level + 1
+                level += 2
+                
+            errors += 1
+            continue
+
+        cur += 1 
+        level += 1 
+
+    if errors > 1:
+        return False
+
+    return True
+
+
+def check_order(report):
+    if not (report[0] < report[1] < report[2]):
+        report = report[::-1]
+    ind = 0
+    for ind, val in enumerate(report):
+        if ind == len(report)-1:
+            break
+
+        _next = report[ind+1]
+
+        #print(f"{val} > {report[ind+1]}")
+        if val > _next:
+            return False
+
+        result = _next-val
+        #print(f"1 <= {result} <= 3 IS {1 <= result <= 3}")
+        if not(1 <= result <= 3):
+            return False
+
+        ind += 1 
+    return True
+
+def is_safe(report):
+    # must be asc or desc
+    # dist must be between 1 and 3
+    return check_order(report)
+
+def part1():
+    reports = parse()
+
+    results = []
+    #for report in reports[0:1]:
+    for report in reports:
+        if is_safe(report):
+            results.append(report)
+
+
+    #print(results)
+    return len(results)
+
+def part2():
+    reports = parse()
+
+    results = []
+    #for report in reports[0:1]:
+    for report in reports:
+        if check_order_2(report):
+            results.append(report)
+
+
+    #print(results)
+    return len(results)
+
+
+def main():
+    #results = part1()
+    results = part2()
+    # 560 is too low
+    print(results)
+
+
+
+if __name__ == "__main__":
+    main()
+
